@@ -1,0 +1,37 @@
+# Drop this service into your domain's docker-compose.yml. It mirrors the
+# hardened shape proven for the Eyes Only Vault bridge: read-only rootfs,
+# tmpfs for /tmp, dropped capabilities, 128 MB cap, internal-only by default.
+#
+# Publish to the host loopback (for the Cloudflare Tunnel) with a small override
+# file — see docs/RUNBOOK-r630.md. NEVER bind to 0.0.0.0.
+services:
+  mcp-bridge:
+    build:
+      context: .            # repo root (Dockerfile builds core/ + src/)
+    environment:
+      MCP_PORT: 3100
+      MCP_BEARER_TOKEN: ${MCP_BEARER_TOKEN:-}
+      APP_NAME: ${APP_NAME:-mcp-bridge}
+      DATABASE_URL: ${DATABASE_URL:-}
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3100/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    # networks: [your_network]   # put it on the same network as your db service
+
+# Optional override file (e.g. docker-compose.mcp-port.yml) to let the tunnel reach it:
+#   services:
+#     mcp-bridge:
+#       ports:
+#         - "127.0.0.1:3100:3100"   # loopback only
